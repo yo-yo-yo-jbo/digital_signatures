@@ -15,3 +15,59 @@ Thus:
 In this blogpost, I will be sharing two methods commonly used to sign messages: one with `RSA` and one with Elliptic Curves.
 
 ## Digital signatures with RSA
+As a reminder, in `RSA` we have a *private key* we refer to as `d`, and a *public key* we refer to as `e`.  
+Those are two numbers that "magically" (mathematically, really) ensure that $(m^d)^e = m (mod n)$ for a message `m` (within a certain range).  
+Usually, we use the private key for *encryption* and public key for *decryption*, but note we can do it the other way around:  $(m^d)^e = (m^e)^d (mod n)$.  
+Therefore, if we have a message `m`, we could sign it like this: $m^d (mod n)$, thus creating the message `m || sign(m)`.  
+The receiver cannot easily derive `d` from the signature, but there are some issues with that approach:
+1. The message `m` cannot be arbitrarily long - since we treat it as a number, it must be strictly lower than `n` (commonly 4096 bits).
+2. There is a *multiplication* issue - assuming two messages `m1` and `m2`, an attacker could sign their multiplication: $sign(m_1 \cdot m_2) = m_1^d \cdot m_2^d = sign(m_1) \cdot sign(m_2)$! Note the attacker only needed to collect the signatures, and *does not know the private key*.
+
+### Using Cryptographic hash functions
+To deal with those issues (and others), we use a *cryptographic hash function*, which we will mark as `h` and is assumed to be a one-way-function:
+- The function `h` is easy to compute for an arbitrary input - calculating $h(x)$ should not be computationally expensive.
+- The function `h` is hard to reverse - given a value `y`, it's hard to find an `x` such that $h(x) = y$.
+- It's hard to collide function `h` - given $h(x)$, it's hard to find `y` different than `x` such that $h(x) = h(y)$.
+- The output of function `h` has a constant output size for all inputs.
+
+The last point might seem contradictory to the collision requirement - we have infinite numbers of inputs and only a finite set of outputs, which [guarantees](https://en.wikipedia.org/wiki/Pigeonhole_principle) that collisions exist.  
+However, the collision requirement discusses *complexity* rather than impossibility - i.e. practically it'd take a lot of computation power to find a collision.  
+An example of a hash function used these days is [SHA2](https://en.wikipedia.org/wiki/SHA-2). I might one day write about the inner workings of the `SHA` hash function family.
+
+### Signing and verifying
+Armed with the knowledge of cryptographic hash functions, let us slightly redesign our signing algorithm - instead of signing `m`, we will sign the hash of `m`!  
+The verifier could then use our public key and get the hash of the signature. After that - the verifier cannot undo the hashing (it's supposed to be a hard problem!) but rather than that - hash `m` and compare.  
+Let's see that in code:
+
+```python
+def sign(d, n, m, h):
+    """
+        Signs message m with the private key (d, n).
+        Takes as input the hash function h.
+    """
+
+    # Hash the message
+    hashed_message = h(m).digest()
+
+    # Create the signature
+    signature = pow(hashed_message, d, n)    # x^d (mod n)
+
+    # Return the concatenation as a Tuple
+    return (m, signature)
+
+def verify(e, n, m, h, signature):
+    """
+        Verifies the message m with the given signature and the public key (e, n).
+    """
+
+    # Decrypt the signature with the public key
+    alleged_hash = pow(signature, e, n)      # x^e (mod n)
+
+    # Hash the message
+    hashed_message = h(m).digest()
+
+    # Compare the two
+    return alleged_hash == hashed_message
+```
+
+I left out some things (the signature is currently a number rather than a set of bytes, the hashed message is a set of bytes rather than a number) but I hope the details are clear.
