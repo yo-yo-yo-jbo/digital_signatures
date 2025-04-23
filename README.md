@@ -4,7 +4,7 @@ In the physical (human) world, we sign checks and contracts, but those can easil
 In this blogpost, we're going to explore the main ideas behind digital signatures.  
 At this point, we've had quite a few cryptography blogposts already, I will be heavily relying on my previous [RSA](https://github.com/yo-yo-yo-jbo/rsa_math/) and [ECC](https://github.com/yo-yo-yo-jbo/ecc_intro/) blogposts.
 
-## High-level design
+## High-level ideas
 We refer to the contents of a file or a buffer that we wish to sign as a *message*.  
 The idea is to concatenate something to the message - that "something" is called a *signature*.  
 In addition, we will be relying on the idea of public and private keys - the concept is explained in my [RSA](https://github.com/yo-yo-yo-jbo/rsa_math/) blogpost.  
@@ -37,37 +37,45 @@ An example of a hash function used these days is [SHA2](https://en.wikipedia.org
 ### Signing and verifying
 Armed with the knowledge of cryptographic hash functions, let us slightly redesign our signing algorithm - instead of signing `m`, we will sign the hash of `m`!  
 The verifier could then use our public key and get the hash of the signature. After that - the verifier cannot undo the hashing (it's supposed to be a hard problem!) but rather than that - hash `m` and compare.  
-Let's see that in code:
+Let's code that! Note we will have to convert data from bytes to numbers and back. Here's what I coded:
 
 ```python
-def sign(d, n, m, h):
+import hashlib
+
+def sign(d, n, m):
     """
         Signs message m with the private key (d, n).
-        Takes as input the hash function h.
     """
 
-    # Hash the message
-    hashed_message = h(m).digest()
+    # Hash the message and convert the hash to a number
+    hash_val = hashlib.sha256(m).digest()
+    hash_val = int.from_bytes(hash_val, byteorder='little')
 
-    # Create the signature
-    signature = pow(hashed_message, d, n)    # x^d (mod n)
+    # Create the signature and convert it into bytes
+    signature = pow(hash_val, d, n)
+    signature = signature.to_bytes(length=n.bit_length() // 8, byteorder='little')
 
-    # Return the concatenation as a Tuple
-    return (m, signature)
+    # Return signature
+    return signature
 
-def verify(e, n, m, h, signature):
+def verify(e, n, m, signature):
     """
         Verifies the message m with the given signature and the public key (e, n).
     """
 
-    # Decrypt the signature with the public key
-    alleged_hash = pow(signature, e, n)      # x^e (mod n)
+    # Convert signature to a number
+    signature_val = int.from_bytes(signature, byteorder='little')
 
-    # Hash the message
-    hashed_message = h(m).digest()
+    # Decrypt the signature with the public key
+    alleged_hash_val = pow(signature_val, e, n)
+
+    # Hash the message and convert it into a number
+    hashed_message = hashlib.sha256(m).digest()
+    hashed_message_val = int.from_bytes(hashed_message, byteorder='little')
 
     # Compare the two
-    return alleged_hash == hashed_message
+    return alleged_hash_val == hashed_message_val
 ```
 
-I left out some things (the signature is currently a number rather than a set of bytes, the hashed message is a set of bytes rather than a number) but I hope the details are clear.
+Don't believe me? Test it!  
+You can easily generate an `RSA` keypair and sign an arbitrary message.
