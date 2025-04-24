@@ -79,3 +79,11 @@ def verify(e, n, m, signature):
 
 Don't believe me? Test it!  
 You can easily generate an `RSA` keypair and sign an arbitrary message.
+
+## ECDSA
+Moving on, we could use Elliptic Curves for digital signatures!  
+That method is known as [ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm) and relies on the Discrete Logarithm problem on Elliptic Curves.  
+Unlike the `RSA` approach - here's it's more complicated. Let's understand why (hand wavy):
+- In `RSA`, encryption and decryption use the same operation - we work by exponentiation over large numbers in a large finite Field. We say that the exponantiation operation is *Commutative* - and use that to our advantage.
+- In Elliptic Curves, our private key is very different from our public key - our private key is a scalar, but our public key is a point on a curve! We do not have a similar Commutative operation - for example, if our private key is `k` (with a generator point `G`), we can create a public key `kG` but we cannot share a magical $k^{-1}$ without revealing the private key!
+
