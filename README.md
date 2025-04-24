@@ -86,4 +86,18 @@ That method is known as [ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Dig
 Unlike the `RSA` approach - here's it's more complicated. Let's understand why (hand wavy):
 - In `RSA`, encryption and decryption use the same operation - we work by exponentiation over large numbers in a large finite Field. We say that the exponantiation operation is *Commutative* - and use that to our advantage.
 - In Elliptic Curves, our private key is very different from our public key - our private key is a scalar, but our public key is a point on a curve! We do not have a similar Commutative operation - for example, if our private key is `k` (with a generator point `G`), we can create a public key `kG` but we cannot share a magical $k^{-1}$ without revealing the private key!
+- One more reason is that hash values are not points on a curve. We can certainly turn an arbitrary hash value into a point, but it's an extra step.
 
+So, for that, we will need something more sophisticated. The main idea is creating another "key" (ephemeral one) and generate another point.  
+That point will then be combined in some way with the hash function, as well as proving that the way it was used requires for the signer to know the (long-term) private key.  
+Instead of using further words, let's describe the algorithm and then explain why it's correct.
+
+### Signing with ECDSA
+Setting the state, we assume the signer has a private key `d`, as well as a public key `Q = dG` that is "trusted" by the verifier.  
+The verifier also knows the curve domain parameters (generator `G`, modulus `n`, the curve equation itself and so on).  
+To sign a message `m`, we do the following:
+1. Use a hash function to get `z = hash(m)`. If `z` has more bits than the bit length of `n` - we trim it down, assuming the hash function is still good enough even after truncation.
+2. We get a random number `k` between `1` and `n-1` - that will be our epehemeral key.
+3. We now calculate a corresponding public epehemeral key: `R = kG`. We mark `r` as the `x` coordinate of `R` and make sure it's not 0 (if it is, we randomize a new `k` and retry).
+4. We calculate: $s = k^{-1}(z + rd)$. Note `s` is a scalar and $k^{-1}$ is the multiplicative inverse of `k (mod n)`.
+5. The signature if `(r, s)`.
