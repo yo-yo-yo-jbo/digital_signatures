@@ -137,3 +137,153 @@ We also assume bit sizes of `r` and `s` are sufficiently large against brute-for
 Note Elliptic Curve point operations are not linear, and so, the `x` coorinate of `R` behaves like a hash function involving $u_1$, $u_2$, `Q` and `G`.  
 We mark `R = kG` and note $R = zs^{-1}G + rs^{-1}Q = s^{-1}(z + rd)G = kG$, so the attacker tries to find, for a given `r`, a value `s` that satisfies this equation.  
 However, attacker does not know `k` or `d`, so this is difficult. This is also why the point addition is so important - that breaks the linerarity of this potential attack.
+
+### Real world implementation
+This time I'd like to share the code in [OpenSSL](https://github.com/openssl/openssl) that handles ECDSA.  
+OpenSSL is notoriously full of function pointers and abstraction layers - true ECDSA verification starts with [EVP_DigestVerify](https://man.openbsd.org/EVP_DigestVerify.3) but eventually goes to a function called `ossl_ecdsa_simple_verify_sig`. The code is not terribly long, so I'll just paste it here, as it was at the day of writing this blogpost:
+
+```c
+int ossl_ecdsa_simple_verify_sig(const unsigned char *dgst, int dgst_len,
+                                 const ECDSA_SIG *sig, EC_KEY *eckey)
+{
+    int ret = -1, i;
+    BN_CTX *ctx;
+    const BIGNUM *order;
+    BIGNUM *u1, *u2, *m, *X;
+    EC_POINT *point = NULL;
+    const EC_GROUP *group;
+    const EC_POINT *pub_key;
+
+    /* check input values */
+    if (eckey == NULL || (group = EC_KEY_get0_group(eckey)) == NULL ||
+        (pub_key = EC_KEY_get0_public_key(eckey)) == NULL || sig == NULL) {
+        ERR_raise(ERR_LIB_EC, EC_R_MISSING_PARAMETERS);
+        return -1;
+    }
+
+    if (!EC_KEY_can_sign(eckey)) {
+        ERR_raise(ERR_LIB_EC, EC_R_CURVE_DOES_NOT_SUPPORT_SIGNING);
+        return -1;
+    }
+
+    ctx = BN_CTX_new_ex(eckey->libctx);
+    if (ctx == NULL) {
+        ERR_raise(ERR_LIB_EC, ERR_R_BN_LIB);
+        return -1;
+    }
+    BN_CTX_start(ctx);
+    u1 = BN_CTX_get(ctx);
+    u2 = BN_CTX_get(ctx);
+    m = BN_CTX_get(ctx);
+    X = BN_CTX_get(ctx);
+    if (X == NULL) {
+        ERR_raise(ERR_LIB_EC, ERR_R_BN_LIB);
+        goto err;
+    }
+
+    order = EC_GROUP_get0_order(group);
+    if (order == NULL) {
+        ERR_raise(ERR_LIB_EC, ERR_R_EC_LIB);
+        goto err;
+    }
+
+    if (BN_is_zero(sig->r) || BN_is_negative(sig->r) ||
+        BN_ucmp(sig->r, order) >= 0 || BN_is_zero(sig->s) ||
+        BN_is_negative(sig->s) || BN_ucmp(sig->s, order) >= 0) {
+        ERR_raise(ERR_LIB_EC, EC_R_BAD_SIGNATURE);
+        ret = 0;                /* signature is invalid */
+        goto err;
+    }
+    /* calculate tmp1 = inv(S) mod order */
+    if (!ossl_ec_group_do_inverse_ord(group, u2, sig->s, ctx)) {
+        ERR_raise(ERR_LIB_EC, ERR_R_BN_LIB);
+        goto err;
+    }
+    /* digest -> m */
+    i = BN_num_bits(order);
+    /*
+     * Need to truncate digest if it is too long: first truncate whole bytes.
+     */
+    if (8 * dgst_len > i)
+        dgst_len = (i + 7) / 8;
+    if (!BN_bin2bn(dgst, dgst_len, m)) {
+        ERR_raise(ERR_LIB_EC, ERR_R_BN_LIB);
+        goto err;
+    }
+    /* If still too long truncate remaining bits with a shift */
+    if ((8 * dgst_len > i) && !BN_rshift(m, m, 8 - (i & 0x7))) {
+        ERR_raise(ERR_LIB_EC, ERR_R_BN_LIB);
+        goto err;
+    }
+    /* u1 = m * tmp mod order */
+    if (!BN_mod_mul(u1, m, u2, order, ctx)) {
+        ERR_raise(ERR_LIB_EC, ERR_R_BN_LIB);
+        goto err;
+    }
+    /* u2 = r * w mod q */
+    if (!BN_mod_mul(u2, sig->r, u2, order, ctx)) {
+        ERR_raise(ERR_LIB_EC, ERR_R_BN_LIB);
+        goto err;
+    }
+
+    if ((point = EC_POINT_new(group)) == NULL) {
+        ERR_raise(ERR_LIB_EC, ERR_R_EC_LIB);
+        goto err;
+    }
+    if (!EC_POINT_mul(group, point, u1, pub_key, u2, ctx)) {
+        ERR_raise(ERR_LIB_EC, ERR_R_EC_LIB);
+        goto err;
+    }
+
+    if (!EC_POINT_get_affine_coordinates(group, point, X, NULL, ctx)) {
+        ERR_raise(ERR_LIB_EC, ERR_R_EC_LIB);
+        goto err;
+    }
+
+    if (!BN_nnmod(u1, X, order, ctx)) {
+        ERR_raise(ERR_LIB_EC, ERR_R_BN_LIB);
+        goto err;
+    }
+    /*  if the signature is correct u1 is equal to sig->r */
+    ret = (BN_ucmp(u1, sig->r) == 0);
+ err:
+    BN_CTX_end(ctx);
+    BN_CTX_free(ctx);
+    EC_POINT_free(point);
+    return ret;
+}
+```
+
+Some interesting notes:
+1. OpenSSL works with a module called `BIGNUM` and is recognizable by the prefix `BN_`.
+2. The beginning of this function has some sanity checks - the key that we got is good for verification and so on.
+3. The interesting checks start at `BN_is_zero` - we check that `r` is not 0, as well as check for negative values (with `BN_is_negative`), and finally - validate that `r` is less than the order of the generator point (in a variable called `order` here) by calling `BN_ucmp`. Similar checks are done for `s`.
+4. After calculating $s^{-1}$ (using `ossl_ec_group_do_inverse_ord`), the algorithm performs the hashing (good for performance as hashing is computationally expensive) as well as truncating the hash if it's too big, as I previously mentioned.
+5. Further down, `u1` and `u2` are calculated, and the addition of $u_1G$ and $u_2Q$ iis assigned to a new point - in the code it's just called `point`.
+6. Lastly, we get the `x` coordinate of the point by callng `EC_POINT_get_affine_coordinates`, and finally that coordinate is compared to `r`.
+
+One thing that is missing from this code is the check that `R` (or variable `point` really) is not the point at infinity ($\mathcal{O}$).  
+I thought I have found a bug that might be quite impactful, but apparently that's not the case - look at `EC_POINT_get_affine_coordinates`:
+
+```c
+int EC_POINT_get_affine_coordinates(const EC_GROUP *group,
+                                    const EC_POINT *point, BIGNUM *x, BIGNUM *y,
+                                    BN_CTX *ctx)
+{
+    if (group->meth->point_get_affine_coordinates == NULL) {
+        ERR_raise(ERR_LIB_EC, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
+        return 0;
+    }
+    if (!ec_point_is_compat(point, group)) {
+        ERR_raise(ERR_LIB_EC, EC_R_INCOMPATIBLE_OBJECTS);
+        return 0;
+    }
+    if (EC_POINT_is_at_infinity(group, point)) {
+        ERR_raise(ERR_LIB_EC, EC_R_POINT_AT_INFINITY);
+        return 0;
+    }
+    return group->meth->point_get_affine_coordinates(group, point, x, y, ctx);
+}
+```
+
+The `EC_POINT_is_at_infinity` call exactly solves that problem - indeed there is an implicit check against that case. Phew!
