@@ -113,6 +113,17 @@ Verfier gets a signature `(r, s)` and does the following:
 5. Calculate a new point: $R = u_1G + u_2Q$, and validate the resulting point `R` is not the point at infinity $\mathcal{O}$.
 6. Check the signature - compare the `x` coodinate of `R` to `r` - if they are equal, we consider the signature valid.
 
+### Why is ECDSA "correct"?
+Okay, this was quite a lot. There is true beauty in why this works.  
+We need to prove two things:
+1. The signer knows the private key `d`.
+2. Forging a signature `(r, s)` that satisfy the verification is difficult without knowledge of the private key `d`.
 
+For simplicity, let's write the verification check in one equation, assuming all previous checks have passed:  
+$r \stackrel{?}{=} x\[zs^{-1}G + rs^{-1}Q\]$
 
+#### Signer knows the private key
+Since `Q = dG`, the point `R` used as the right hand side of the verification equation could be changed:  
+$R = zs^{-1}G + rs^{-1}Q = zs^{-1}G + rs^{-1}(dG) = (zs^{-1} + rds^{-1})G = s^{-1}(z + rd)G$
 
+Note $s = k^{-1}(z + rd)$ which means $s^{-1} = k(z + rd)^{-1}$. Plugging that in we get $R = s^{-1}(z + rd)G = kG$.
