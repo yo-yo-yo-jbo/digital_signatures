@@ -287,3 +287,17 @@ int EC_POINT_get_affine_coordinates(const EC_GROUP *group,
 ```
 
 The `EC_POINT_is_at_infinity` call exactly solves that problem - indeed there is an implicit check against that case. Phew!
+
+### Why repeating the nonce is a bad idea
+There are numerous pitfalls when implementing `ECDSA` - besides all the usual Elliptic Curve attacks we have [described in the past](https://github.com/yo-yo-yo-jbo/ecc_intro/).  
+For instance, if the `OpenSSL` code I showed wouldn't have checked that `r` and `s` are non-negative but simply check that they are less than `n` and non-zero, an attacker could have set them to be `-n`, which behaves exactly like zero (mod `n`). This has catastrophic consequences - try to see what happens to the verification formula!  
+I would like to talk about a different issue - the generation of `k`. We said that `k` is an *ephemeral nonce* and it's critical to not repeat it for two different messages.  
+If `k` is repeated, an attacker could easily get the private key `d`!  
+Imagine two signatures $(r_1, s_1)$ for hash $z_1$ and  $(r_2, s_2)$ for hash $z_2$, with a joint nonce `k`. Well:  
+$s_1 - s_2 = k^{-1}(z_1 - z_2)$  
+Which means the attacker now knows `k`:  
+$k = (z_1 - z_2)(s_1 - s_2)^{-1}$  
+
+Remembering that $s_1 = k^{-1}(z_1 + r_1d)$, we get $(ks_1 - z_1)r^{-1} = d$ and the attacker knows the entire left-hand side. Ouch!  
+This is not only theoretical - that attack was exactly used to [extract the Playstation 3 signing key](https://events.ccc.de/congress/2010/Fahrplan/attachments/1780_27c3_console_hacking_2010.pdf)!  
+There is also a variation of `ECDSA` that generates a deterministic `k` using a schema called `HMAC-DRBG` - it basically performs an [HMAC](https://en.wikipedia.org/wiki/HMAC) calculation on the private key `d` and the hashed message `z`. More on that in [RFC6979](https://www.rfc-editor.org/rfc/rfc6979.html).
