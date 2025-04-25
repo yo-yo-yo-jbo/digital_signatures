@@ -85,10 +85,10 @@ Moving on, we could use Elliptic Curves for digital signatures!
 That method is known as [ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm) and relies on the Discrete Logarithm problem on Elliptic Curves.  
 Unlike the `RSA` approach - here's it's more complicated. Let's understand why (hand wavy):
 - In `RSA`, encryption and decryption use the same operation - we work by exponentiation over large numbers in a large finite Field. We say that the exponantiation operation is *Commutative* - and use that to our advantage.
-- In Elliptic Curves, our private key is very different from our public key - our private key is a scalar, but our public key is a point on a curve! We do not have a similar Commutative operation - for example, if our private key is `k` (with a generator point `G`), we can create a public key `kG` but we cannot share a magical $k^{-1}$ without revealing the private key!
+- In Elliptic Curves, our private key is very different from our public key - our private key is a scalar, but our public key is a point on a curve! We do not have a similar Commutative operation - for example, if our private key is `d` (with a generator point `G`), we can create a public key `dG` but we cannot share a magical $d^{-1}$ without revealing the private key!
 - One more reason is that hash values are not points on a curve. We can certainly turn an arbitrary hash value into a point, but it's an extra step.
 
-So, for that, we will need something more sophisticated. The main idea is creating another "key" (ephemeral one) and generate another point.  
+So, for that, we will need something more sophisticated. The main idea is creating a random *epehemral nonce* and generate another point with it.  
 That point will then be combined in some way with the hash function, as well as proving that the way it was used requires for the signer to know the (long-term) private key.  
 Instead of using further words, let's describe the algorithm and then explain why it's correct.
 
@@ -97,7 +97,22 @@ Setting the state, we assume the signer has a private key `d`, as well as a publ
 The verifier also knows the curve domain parameters (generator `G`, modulus `n`, the curve equation itself and so on).  
 To sign a message `m`, we do the following:
 1. Use a hash function to get `z = hash(m)`. If `z` has more bits than the bit length of `n` - we trim it down, assuming the hash function is still good enough even after truncation.
-2. We get a random number `k` between `1` and `n-1` - that will be our epehemeral key.
+2. We get a random number `k` between `1` and `n-1` - that will be our epehemeral nonce. It's important it's randomly generated for *every* signature (more on that - later).
 3. We now calculate a corresponding public epehemeral key: `R = kG`. We mark `r` as the `x` coordinate of `R` and make sure it's not 0 (if it is, we randomize a new `k` and retry).
 4. We calculate: $s = k^{-1}(z + rd)$. Note `s` is a scalar and $k^{-1}$ is the multiplicative inverse of `k (mod n)`.
-5. The signature if `(r, s)`.
+5. The signature is `(r, s)`.
+
+### Verification wih ECDSA
+Similarly to the signing process, we assume the verifier knows the curve domain parameters, as well as the public key `Q`.  
+Obviously verifier does not know the private key `d` or the ephemeral nonce `k`.  
+Verfier gets a signature `(r, s)` and does the following:
+1. Verify that `r` and `s` from the signature are scalars in the range `1 .. (n-1)`.
+2. Use a hash function to get `z = hash(m)`. If `z` and truncate if it's too large.
+3. Calculate $u_1 = zs^{-1} (mod n)$ (using modular inverse [Euclidean Algorithm](https://en.wikipedia.org/wiki/Euclidean_algorithm) that I have [described in the past](https://github.com/yo-yo-yo-jbo/crypto_modular/)).
+4. Calculate $u_2 = rs^{-1} (mod n)$ similarly.
+5. Calculate a new point: $R = u_1G + u_2Q$, and validate the resulting point `R` is not the point at infinity $\mathcal{O}$.
+6. Check the signature - compare the `x` coodinate of `R` to `r` - if they are equal, we consider the signature valid.
+
+
+
+
