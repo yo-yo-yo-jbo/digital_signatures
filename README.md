@@ -83,7 +83,8 @@ You can easily generate an `RSA` keypair and sign an arbitrary message.
 ## ECDSA
 Moving on, we could use Elliptic Curves for digital signatures!  
 That method is known as [ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm) and relies on the Discrete Logarithm problem on Elliptic Curves.  
-Unlike the `RSA` approach - here's it's more complicated. Let's understand why (hand wavy):
+As a side note, this method is similar to a previous method called [DSA](https://en.wikipedia.org/wiki/Digital_Signature_Algorithm) which is rarely used today - that's why I jump straight to `ECDSA`.  
+Unlike the `RSA` approach - here's things are way more complicated. Let's understand why (hand wavy):
 - In `RSA`, encryption and decryption use the same operation - we work by exponentiation over large numbers in a large finite Field. We say that the exponantiation operation is *Commutative* - and use that to our advantage.
 - In Elliptic Curves, our private key is very different from our public key - our private key is a scalar, but our public key is a point on a curve! We do not have a similar Commutative operation - for example, if our private key is `d` (with a generator point `G`), we can create a public key `dG` but we cannot share a magical $d^{-1}$ without revealing the private key!
 - One more reason is that hash values are not points on a curve. We can certainly turn an arbitrary hash value into a point, but it's an extra step.
@@ -290,8 +291,8 @@ The `EC_POINT_is_at_infinity` call exactly solves that problem - indeed there is
 
 ### Why repeating the nonce is a bad idea
 There are numerous pitfalls when implementing `ECDSA` - besides all the usual Elliptic Curve attacks we have [described in the past](https://github.com/yo-yo-yo-jbo/ecc_intro/).  
-For instance, if the `OpenSSL` code I showed wouldn't have checked that `r` and `s` are non-negative but simply check that they are less than `n` and non-zero, an attacker could have set them to be `-n`, which behaves exactly like zero (mod `n`). This has catastrophic consequences - try to see what happens to the verification formula!  
-I would like to talk about a different issue - the generation of `k`. We said that `k` is an *ephemeral nonce* and it's critical to not repeat it for two different messages.  
+For instance, if the `OpenSSL` code I showed wouldn't have checked that `r` and `s` are non-negative but simply check that they are less than `n` and non-zero, an attacker could have set them to be `-n`, which behaves exactly like zero (mod `n`), which is quite the bug.  
+However, I would like to talk about a different issue - the generation of `k`. We said that `k` is an *ephemeral nonce* and it's critical to not repeat it for two different messages.  
 If `k` is repeated, an attacker could easily get the private key `d`!  
 Imagine two signatures $(r_1, s_1)$ for hash $z_1$ and  $(r_2, s_2)$ for hash $z_2$, with a joint nonce `k`. Well:  
 $s_1 - s_2 = k^{-1}(z_1 - z_2)$  
