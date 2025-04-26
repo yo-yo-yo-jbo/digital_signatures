@@ -84,6 +84,7 @@ You can easily generate an `RSA` keypair and sign an arbitrary message.
 Moving on, we could use Elliptic Curves for digital signatures!  
 That method is known as [ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm) and relies on the Discrete Logarithm problem on Elliptic Curves.  
 As a side note, this method is similar to a previous method called [DSA](https://en.wikipedia.org/wiki/Digital_Signature_Algorithm) which is rarely used today - that's why I jump straight to `ECDSA`.  
+In addition, there is a mre "modern" variant called [EdDSA](https://en.wikipedia.org/wiki/EdDSA) which works on something called *twisted Edwards curves* - sadly, I am not knowledgeable enough to post about them, so I leave the link as a reference and move on.  
 Unlike the `RSA` approach - here's things are way more complicated. Let's understand why (hand wavy):
 - In `RSA`, encryption and decryption use the same operation - we work by exponentiation over large numbers in a large finite Field. We say that the exponantiation operation is *Commutative* - and use that to our advantage.
 - In Elliptic Curves, our private key is very different from our public key - our private key is a scalar, but our public key is a point on a curve! We do not have a similar Commutative operation - for example, if our private key is `d` (with a generator point `G`), we can create a public key `dG` but we cannot share a magical $d^{-1}$ without revealing the private key!
@@ -302,3 +303,13 @@ $k = (z_1 - z_2)(s_1 - s_2)^{-1}$
 Remembering that $s_1 = k^{-1}(z_1 + r_1d)$, we get $(ks_1 - z_1)r^{-1} = d$ and the attacker knows the entire left-hand side. Ouch!  
 This is not only theoretical - that attack was exactly used to [extract the Playstation 3 signing key](https://events.ccc.de/congress/2010/Fahrplan/attachments/1780_27c3_console_hacking_2010.pdf)!  
 There is also a variation of `ECDSA` that generates a deterministic `k` using a schema called `HMAC-DRBG` - it basically performs an [HMAC](https://en.wikipedia.org/wiki/HMAC) calculation on the private key `d` and the hashed message `z`. More on that in [RFC6979](https://www.rfc-editor.org/rfc/rfc6979.html).
+
+## Summary
+Digital signatures are everywhere, and most notably are applied to files, messages and certficates.  
+Up until this point I haven't discussed certificates in detail - I will leave that to a future blogpost that discusses [PKI](https://en.wikipedia.org/wiki/Public_key_infrastructure).  
+Because they are quite versatile, I haven't discussed the serialization of them - the binary structure of digital signatures - again, in a future blogpost.  
+I hope the reader appreciates the mathematical concepts behind digital signatures - they are beautiful and elegant.  
+
+Stay tuned!
+
+Jonathan Bar Or
