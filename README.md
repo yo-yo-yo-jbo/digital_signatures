@@ -134,7 +134,7 @@ So, the signer must have known `d` because they are the only ones who could know
 
 #### Forgery is difficult
 This is a trickier one, but let us assume an attacker tries finding a pair `(r, s)` that satisfy the equation.  
-We assume `r` and `s` are scalars within range - if `r` or `s` are `0` (mod `n`) then the equation can be trivially solved.  
+We assume `r` and `s` are scalars within range - if `r` or `s` are `0` (mod `n`) then we either disconnect the public key from the equation, or divide by zero...  
 We also assume bit sizes of `r` and `s` are sufficiently large against brute-force attacks. Then, an attacker could, for example, try to fix `r` and solve for `s`.  
 Note Elliptic Curve point operations are not linear, and so, the `x` coorinate of `R` behaves like a hash function involving $u_1$, $u_2$, `Q` and `G`.  
 We mark `R = kG` and note $R = zs^{-1}G + rs^{-1}Q = s^{-1}(z + rd)G = kG$, so the attacker tries to find, for a given `r`, a value `s` that satisfies this equation.  
