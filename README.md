@@ -295,7 +295,9 @@ There are numerous pitfalls when implementing `ECDSA` - besides all the usual El
 For instance, if the `OpenSSL` code I showed wouldn't have checked that `r` and `s` are non-negative but simply check that they are less than `n` and non-zero, an attacker could have set them to be `-n`, which behaves exactly like zero (mod `n`), which is quite the bug.  
 However, I would like to talk about a different issue - the generation of `k`. We said that `k` is an *ephemeral nonce* and it's critical to not repeat it for two different messages.  
 If `k` is repeated, an attacker could easily get the private key `d`!  
-Imagine two signatures $(r_1, s_1)$ for hash $z_1$ and  $(r_2, s_2)$ for hash $z_2$, with a joint nonce `k`. Well:  
+Imagine two signatures $(r_1, s_1)$ for hash $z_1$ and  $(r_2, s_2)$ for hash $z_2$, with a joint nonce `k`.  
+Well, remember `r` is only affected by `k`, so two signatures using the same `k` will have the same `r` values (easy to spot!).  
+From that point everything becomes scary:  
 $s_1 - s_2 = k^{-1}(z_1 - z_2)$  
 Which means the attacker now knows `k`:  
 $k = (z_1 - z_2)(s_1 - s_2)^{-1}$  
